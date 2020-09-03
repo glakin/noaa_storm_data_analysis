@@ -7,28 +7,49 @@ download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.
 df <- read.csv(bzfile(temp))
 unlink(temp)
 
+# Fixing formatting to make sure like events are grouped together
+df[grepl('HURRICANE',df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'HURRICANE'
+df[grepl('FLOOD', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'FLOOD'
+df[grepl('ICE', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM' 
+df[grepl('SNOW', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM'
+df[grepl('BLIZZARD', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM'
+df[grepl('WINTER STORM', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM'
+df[grepl('FREEZING RAIN', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM'
+df[grepl('TORNADO', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'TORNADO'
+df[grepl('THUNDERSTORM', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'THUNDERSTORM'
+df[grepl('RAIN', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'THUNDERSTORM'
+df[grepl('HAIL', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'HAIL'
+df[grepl('TROPICAL STORM', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'TROPICAL STORM'
+df[grepl('DROUGHT', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'DROUGHT'
+df[grepl('WIND', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WIND'
+df[grepl('TIDE', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'STORM SURGE/TIDE'
+df[grepl('SURF', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'HIGH SURF'
+df[grepl('HEAT', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'HEAT'
+df[grepl('COLD', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'COLD'
+df[grepl('FIRE', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WILDFIRE'
+
 # Define casualties as fatalities + injuries
 df$casualties <- (df$FATALITIES + df$INJURIES)
 
 # calculate property damage in $ using PROPDMGEXP
 df$propDmgCoeff <- 1
-df[df$PROPDMGEXP == 1, ]$propDmgCoeff <- 10
-df[df$PROPDMGEXP %in% c('h', 'H', 2), ]$propDmgCoeff <- 100
-df[df$PROPDMGEXP %in% c('k', 'K', 3), ]$propDmgCoeff <- 1000
-df[df$PROPDMGEXP == 4, ]$propDmgCoeff <- 10000
-df[df$PROPDMGEXP == 5, ]$propDmgCoeff <- 100000
-df[df$PROPDMGEXP %in% c('m', 'M', 6), ]$propDmgCoeff <- 1000000
-df[df$PROPDMGEXP == 7, ]$propDmgCoeff <- 10000000
-df[df$PROPDMGEXP == 8, ]$propDmgCoeff <- 100000000
-df[df$PROPDMGEXP %in% c('B',9), ]$propDmgCoeff <- 1000000000
+df[df$PROPDMGEXP == 1, 'propDmgCoeff'] <- 10
+df[df$PROPDMGEXP %in% c('h', 'H', 2), 'propDmgCoeff'] <- 100
+df[df$PROPDMGEXP %in% c('k', 'K', 3), 'propDmgCoeff'] <- 1000
+df[df$PROPDMGEXP == 4, 'propDmgCoeff'] <- 10000
+df[df$PROPDMGEXP == 5, 'propDmgCoeff'] <- 100000
+df[df$PROPDMGEXP %in% c('m', 'M', 6), 'propDmgCoeff'] <- 1000000
+df[df$PROPDMGEXP == 7, 'propDmgCoeff'] <- 10000000
+df[df$PROPDMGEXP == 8, 'propDmgCoeff'] <- 100000000
+df[df$PROPDMGEXP %in% c('B',9), 'propDmgCoeff'] <- 1000000000
 df$propDmgCost <- df$PROPDMG * df$propDmgCoeff
 
 # calculate crop damage in $ using CROPDMGEXP
 df$cropDmgCoeff <- 1
-df[df$CROPDMGEXP %in% c('h', 'H', 2), ]$cropDmgCoeff <- 100
-df[df$CROPDMGEXP %in% c('k', 'K', 3), ]$cropDmgCoeff <- 1000
-df[df$CROPDMGEXP %in% c('m', 'M', 6), ]$cropDmgCoeff <- 1000000
-df[df$CROPDMGEXP %in% c('B',9), ]$cropDmgCoeff <- 1000000000
+df[df$CROPDMGEXP %in% c('h', 'H', 2), 'cropDmgCoeff'] <- 100
+df[df$CROPDMGEXP %in% c('k', 'K', 3), 'cropDmgCoeff'] <- 1000
+df[df$CROPDMGEXP %in% c('m', 'M', 6), 'cropDmgCoeff'] <- 1000000
+df[df$CROPDMGEXP %in% c('B',9), 'cropDmgCoeff'] <- 1000000000
 df$cropDmgCost <- df$CROPDMG * df$cropDmgCoeff
 
 df$cost <- df$propDmgCost + df$cropDmgCost
@@ -40,14 +61,10 @@ midwest = c('OH', 'MI', 'IN', 'IL', 'WI', 'MN', 'IA', 'MO', 'KS', 'NE', 'SD', 'N
 west = c('NM', 'CO', 'AZ', 'UT', 'WY', 'MT', 'ID', 'NV', 'WA', 'OR', 'CA', 'AK', 'HI')
 
 df$region <- 'Other'
-df[as.character(df$STATE) %in% northeast, ]$region <- 'Northeast'
-df[as.character(df$STATE) %in% south, ]$region <- 'South'
-df[as.character(df$STATE) %in% midwest, ]$region <- 'Midwest'
-df[as.character(df$STATE) %in% west, ]$region <- 'West'
-
-ggplot(df, aes(x=region, y=casualties)) + geom_boxplot()
-
-unique(df$EVTYPE)
+df[as.character(df$STATE) %in% northeast, 'region'] <- 'Northeast'
+df[as.character(df$STATE) %in% south, 'region'] <- 'South'
+df[as.character(df$STATE) %in% midwest, 'region'] <- 'Midwest'
+df[as.character(df$STATE) %in% west, 'region'] <- 'West'
 
 eventTypes <- df %>% 
     group_by(EVTYPE, region) %>% 
@@ -97,8 +114,6 @@ topCasualtiesWest <- eventTypes[eventTypes$region == 'West', ] %>%
 
 topCasualties = rbind(topCasualtiesNortheast, topCasualtiesSouth, topCasualtiesMidwest, topCasualtiesWest)
 
-
-
 # Plot casualty data
 
 ggplot(topCasualties, aes(x=EVTYPE, y=sumCasualties)) +
@@ -140,6 +155,3 @@ ggplot(topCost, aes(x=EVTYPE, y=avgCost)) +
     ylab('Average Cost')
 
 
-
-p <- ggplot(df, aes(x=EVTYPE, y=casualties))
-p + geom_boxplot()

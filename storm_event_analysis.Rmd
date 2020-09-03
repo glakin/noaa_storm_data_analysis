@@ -1,0 +1,202 @@
+---
+title: "Most Impactful Storm Types by US Region"
+author: "Jerry Lakin"
+date: "9/2/2020"
+output: md_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.path = "./figures/", dev='png')
+```
+
+```{r libs, echo=FALSE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+## Synopsis
+
+The purpose of this study is to analyze NOAA storm data and determine which types of storm event are most damaging both in terms of human casualties and damage to property and crops. In order to examine the way the answer to this question may differ across different parts of the country, states were divided into 4 regions: Northeast, South, Midwest and West. 
+
+For each region, the 5 most damaging storm types were found in terms of both casualties and economic cost. These top 5 storm types were then plotted as bar charts and compared across region. In terms of casualties, tornadoes were found to be the most dangerous storm event in each region except the West. The most dangerous storm event in the West was winter storms. In terms of economic cost, the most expensive storm events were floods in the Northeast, Midwest and West, and hurricanes in the South.
+
+## Data Processing
+
+The first step is to download the NOAA data. 
+
+```{r download, warning=FALSE, message=FALSE}
+temp <- tempfile()
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2",temp)
+df <- read.csv(bzfile(temp))
+unlink(temp)
+```
+
+Because this dataset is assembled by many different people around the country, there are formatting issues that make it difficult to work with in its raw form. First of all, there is the column EVTYPE, which contains the event type data which we are interested in analyzing. Unfortunately, the column contains multiple different descriptions for the same type of event. In order to clean up the data, we need to make use of the grepl() function in R to find rows containing certain string patterns. Code with the following pattern was used to tidy up the column and group most different event types:
+
+```{r eventProcess, warning=FALSE, message=FALSE}
+df[grepl('HURRICANE',df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'HURRICANE'
+```
+
+```{r eventProcess2, echo=FALSE, warning=FALSE, message=FALSE}
+df[grepl('FLOOD', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'FLOOD'
+df[grepl('ICE', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM' 
+df[grepl('SNOW', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM'
+df[grepl('BLIZZARD', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM'
+df[grepl('WINTER STORM', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM'
+df[grepl('FREEZING RAIN', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WINTER STORM'
+df[grepl('TORNADO', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'TORNADO'
+df[grepl('THUNDERSTORM', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'THUNDERSTORM'
+df[grepl('RAIN', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'THUNDERSTORM'
+df[grepl('HAIL', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'HAIL'
+df[grepl('TROPICAL STORM', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'TROPICAL STORM'
+df[grepl('DROUGHT', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'DROUGHT'
+df[grepl('WIND', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WIND'
+df[grepl('TIDE', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'STORM SURGE'
+df[grepl('STORM SURGE', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'STORM SURGE'
+df[grepl('SURF', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'HIGH SURF'
+df[grepl('HEAT', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'HEAT'
+df[grepl('COLD', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'COLD'
+df[grepl('FIRE', df$EVTYPE, ignore.case = TRUE), 'EVTYPE'] <- 'WILDFIRE'
+```
+
+Next, we defined our regions using the STATE column. We created a new column region to contain the data. The regions were defined and added to the dataframe using the following pattern:
+
+```{r region, warning=FALSE, message=FALSE}
+northeast = c('ME', 'NH', 'VT', 'MA', 'CT', 'RI', 'NY', 'NJ', 'PA')
+df$region <- 'Other'
+df[as.character(df$STATE) %in% northeast, 'region'] <- 'Northeast'
+```
+```{r region2, echo=FALSE, warning=FALSE, message=FALSE}
+south = c('DE', 'MD', 'DC', 'WV', 'VA', 'KY', 'NC', 'TN', 'SC', 'GA', 'FL', 'AL', 'MS',
+          'LA', 'AR', 'OK', 'TX')
+midwest = c('OH', 'MI', 'IN', 'IL', 'WI', 'MN', 'IA', 'MO', 'KS', 'NE', 'SD', 'ND')
+west = c('NM', 'CO', 'AZ', 'UT', 'WY', 'MT', 'ID', 'NV', 'WA', 'OR', 'CA', 'AK', 'HI')
+
+df[as.character(df$STATE) %in% south, 'region'] <- 'South'
+df[as.character(df$STATE) %in% midwest, 'region'] <- 'Midwest'
+df[as.character(df$STATE) %in% west, 'region'] <- 'West'
+```
+
+Note that the region column is initialized with value 'Other' so that territories outside the 50 states will fall into that category if they do not appear in our lists.
+
+Next, we need to process the property damage and crop damage columns. These columns are rounded to 3 significant digits with the adjacent EXP columns used to express the magnitude in factors of ten. However, like with the EVTYPE column, the formatting is not consistent. For example, hundreds could be expressed as 'h', 'H', or 2, with the latter representing 10^2. In order to address this, we first convert this column to a numeric representing the multiplicative factor
+
+```{r damage}
+df$propDmgCoeff <- 1
+df$cropDmgCoeff <- 1
+df[df$PROPDMGEXP %in% c('h', 'H', 2), 'propDmgCoeff'] <- 100
+df[df$CROPDMGEXP %in% c('h', 'H', 2), 'cropDmgCoeff'] <- 100
+```
+
+```{r damage2, echo=FALSE}
+df[df$PROPDMGEXP == 1, 'propDmgCoeff'] <- 10
+df[df$PROPDMGEXP %in% c('k', 'K', 3), 'propDmgCoeff'] <- 1000
+df[df$PROPDMGEXP == 4, 'propDmgCoeff'] <- 10000
+df[df$PROPDMGEXP == 5, 'propDmgCoeff'] <- 100000
+df[df$PROPDMGEXP %in% c('m', 'M', 6), 'propDmgCoeff'] <- 1000000
+df[df$PROPDMGEXP == 7, 'propDmgCoeff'] <- 10000000
+df[df$PROPDMGEXP == 8, 'propDmgCoeff'] <- 100000000
+df[df$PROPDMGEXP %in% c('B',9), 'propDmgCoeff'] <- 1000000000
+
+df[df$CROPDMGEXP %in% c('h', 'H', 2), 'cropDmgCoeff'] <- 100
+df[df$CROPDMGEXP %in% c('k', 'K', 3), 'cropDmgCoeff'] <- 1000
+df[df$CROPDMGEXP %in% c('m', 'M', 6), 'cropDmgCoeff'] <- 1000000
+df[df$CROPDMGEXP %in% c('B',9), 'cropDmgCoeff'] <- 1000000000
+```
+
+...then multiply the factor by the corresponding PROPDMG/CROPDMG columns:
+
+```{r cost}
+df$propDmgCost <- df$PROPDMG * df$propDmgCoeff
+df$cropDmgCost <- df$CROPDMG * df$cropDmgCoeff
+```
+
+Next we create our casualties and cost columns. Casualties is the sum of fatalities and injuries. Cost is the sum of property damage and crop damage.
+
+```{r casualtyCost}
+df$casualties <- df$FATALITIES + df$INJURIES
+df$cost <- df$propDmgCost + df$cropDmgCost
+```
+
+Next we use dplyr to group by event type and region and summarize each combination.
+
+```{r groupBY, warning=FALSE, message=FALSE}
+eventTypes <- df %>% 
+    group_by(EVTYPE, region) %>% 
+    summarize(count = n(),
+              sumCasualties = sum(casualties),
+              avgCasualties = mean(casualties),
+              maxCasualties = max(casualties),
+              medianCasualties = median(casualties),
+              sumFatalities = sum(FATALITIES),
+              avgFatalities = mean(FATALITIES),
+              maxFatalities = max(FATALITIES),
+              medianFatalities = median(FATALITIES),
+              sumCost = sum(cost),
+              avgCost = mean(cost),
+              maxCost = max(cost),
+              medianCost = median(cost))
+eventTypes <- data.frame(eventTypes)
+```
+
+We use the slice_max function to select the 5 event types with the highest casualties and highest cost got each region with the following pattern:
+
+```{r top}
+topCasualtiesNortheast <- eventTypes[eventTypes$region == 'Northeast', ] %>% 
+    filter(!is.na(sumCasualties)) %>%
+    slice_max(order_by = sumCasualties, n = 5, with_ties = FALSE)
+
+topCostNortheast <- eventTypes[eventTypes$region == 'Northeast', ] %>% 
+    filter(!is.na(sumCost)) %>%
+    slice_max(order_by = sumCost, n = 5, with_ties = FALSE)
+```
+```{r top2, echo=FALSE}
+topCostSouth <- eventTypes[eventTypes$region == 'South', ] %>% 
+    filter(!is.na(sumCost)) %>%
+    slice_max(order_by = sumCost, n = 5, with_ties = FALSE)
+topCostMidwest <- eventTypes[eventTypes$region == 'Midwest', ] %>% 
+    filter(!is.na(sumCost)) %>%
+    slice_max(order_by = sumCost, n = 5, with_ties = FALSE)
+topCostWest <- eventTypes[eventTypes$region == 'West', ] %>% 
+    filter(!is.na(sumCost)) %>%
+    slice_max(order_by = sumCost, n = 5, with_ties = FALSE)
+
+topCasualtiesSouth <- eventTypes[eventTypes$region == 'South', ] %>% 
+    filter(!is.na(sumCasualties)) %>%
+    slice_max(order_by = sumCasualties, n = 5, with_ties = FALSE)
+topCasualtiesMidwest <- eventTypes[eventTypes$region == 'Midwest', ] %>% 
+    filter(!is.na(sumCasualties)) %>%
+    slice_max(order_by = sumCasualties, n = 5, with_ties = FALSE)
+topCasualtiesWest <- eventTypes[eventTypes$region == 'West', ] %>% 
+    filter(!is.na(sumCasualties)) %>%
+    slice_max(order_by = sumCasualties, n = 5, with_ties = FALSE)
+```
+
+And finally we combine these regional dataframes back together to prepare to plot.
+
+```{r combine}
+topCost = rbind(topCostNortheast, topCostSouth, topCostMidwest, topCostWest)
+topCasualties = rbind(topCasualtiesNortheast, topCasualtiesSouth, topCasualtiesMidwest, topCasualtiesWest)
+```
+
+## Results
+
+```{r casualtyPlot, fig.width = 10}
+ggplot(topCasualties, aes(x=reorder(EVTYPE, -sumCasualties), y=sumCasualties)) +
+    geom_bar(stat="identity") +
+    facet_wrap(region ~ ., scales="free") +
+    xlab("Event Type") +
+    ylab("Total Casualties") +
+    ggtitle('Cumulative Casualties of Storm Type by US Region')
+```
+
+```{r costPlot, fig.width = 10}
+ggplot(topCost, aes(x=reorder(EVTYPE, -sumCost), y=sumCost/1000000000)) +
+    geom_bar(stat="identity") +
+    facet_wrap(region ~ ., scales="free") +
+    xlab('Event Type') +
+    ylab('Total Cost (Billions)') +
+    ggtitle('Cumulative Economic Impact of Storm Type by US Region')
+```
+
